@@ -7,7 +7,7 @@ This library is specific to the engineering workplace in Australia, and therefor
 **Current Modules**
 
 + PdfTools - Library for scraping and manipulating PDFs. Includes the following functions:
-+ 
+
   + RequirementsScraper - Converts requirements briefs from clients into a trackable excel spreadsheet. 
 
 This open source library is developed by Turnbull Engineering. 
