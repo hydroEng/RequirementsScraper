@@ -12,4 +12,4 @@ This library is specific to the engineering workplace in Australia, and therefor
 
 This open source library is developed by Turnbull Engineering. 
 
-![](/home/Taha/Work Share/PyEngTools/TElogo.png)
+![TE Logo](https://raw.githubusercontent.com/suryaya/PyEngTools/master/TElogo.png)
