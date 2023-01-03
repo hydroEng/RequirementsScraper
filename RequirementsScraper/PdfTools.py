@@ -23,8 +23,9 @@ class PdfSettings:
         pass
 
     class TableSettings:
-        """ This class stores detection parameters for PDFPlumber. Currently only supports TfNSW table preset (should be
-        good enough for most cases """
+        """ This class stores detection parameters for PDFPlumber. Currently
+        only supports TfNSW table preset (should be good enough for most
+        cases) """
 
         def __init__(self):
             self.table_parameters = self.settings()
@@ -64,8 +65,8 @@ class PdfSettings:
 
     class PageMargins:
 
-        """ Set parameters related to page / text layout such as regexes for finding requirements and
-        setting page margins"""
+        """ Set parameters related to page / text layout such as regexes for
+        finding requirements and setting page margins """
 
         def __init__(self, page):
 
@@ -76,7 +77,8 @@ class PdfSettings:
             width = page.width
             height = page.height
 
-            """ This function takes a pdfplumber page object and returns page margins based on value of `preset`"""
+            """ This function takes a pdfplumber page object and returns page
+            margins based on value of `preset`"""
             if preset == 'TfNSW':
                 page_margins = (0, 50, width, height - 70)
             try:
@@ -90,6 +92,20 @@ class RequirementsScraper:
     def __init__(self, input_path, output_path):
         self.input_path = input_path
         self.output_path = output_path
+
+    def extract_table_text(page, table):
+        table_text = page.crop(table.bbox).extract_text()
+        return table_text
+
+    def remove_table_text(page_text, table_text, table_number):
+        # Clean up page by removing table text, replace with reserved string to
+        # paste images into later.
+        updated_text = page_text.replace(table_text, f"\n@@reserved Table {table_number}")
+        return updated_text
+
+    def table_to_image(page, table, table_number, save_location, table_resolution=100):
+        table_filepath = os.path.join(save_location, f"TABLE {table_number}.png")
+        page.crop(table.bbox).to_image(resolution=table_resolution).save(table_filepath)
 
     class SearchPatterns:
         def __init__(self, chapter_headings, requirements):
@@ -106,8 +122,7 @@ class RequirementsScraper:
                 print(f"Error! No pdf page preset {preset} exists.")
 
     @staticmethod
-    def scrape_pdfs(self, chapter_headings, requirements, table_settings, extract_tables=True, table_resolution=100):
-
+    def scrape_pdfs(self, chapter_headings, requirements, table_settings, extract_tables=True):
         """Main function to convert document requirements to a dataframe."""
         input_pdfs = self.detect_input_pdfs(self.input_path)
 
@@ -117,9 +132,10 @@ class RequirementsScraper:
         # Folder for saving images:
 
         if extract_tables:
-            temp_folder = self.output_path()
-            if not os.path.exists(table_filepath):
-                os.makedirs(table_filepath)
+            temp_folder = os.path.join(self.output_path(), "table_filepath")
+
+            if not os.path.exists(temp_folder):
+                os.makedirs(temp_folder)
 
         for input_pdf in input_pdfs:
 
@@ -129,30 +145,20 @@ class RequirementsScraper:
             for page in pages:
 
                 page_margins = PdfSettings.PageMargins.page_margins(page)
-
-                # Crop header, extract text, locate tables to extract later/ remove text
+                # Crop header, extract text, locate tables to extract later/remove text
                 page = page.crop(page_margins)
                 page_text = page.extract_text()
                 tables = page.find_tables()
-                tables_bbox = []
 
+                # Extract text, remove text from page, extract table to image if extract_tables=True:
                 for table in tables:
                     table_index += 1
-                    tables_bbox.append(table.bbox)
+                    table_text = self.extract_table_text(page, table)
+                    page_text = self.remove_table_text(page_text, table_text, table_index)
 
+                    if extract_tables:
+                        self.table_to_image(page, table, table_index, self.output_path)
+            # TODO:
+                #1. Find headings and requirement texts, store them in lists (maybe dataframe?)
+                #
 
-
-
-
-                for table in tables:
-                    # Loop over each table found, add bounding box to list. Create dummy folder for tables
-                    table_index += 1
-                    tables_bbox.append(table.bbox)
-                    table_filename = f"TABLE {table_index}.png"
-
-                    table_filepath = os.path.join(self.input_path, "scrape_temp_folder")
-                    page.crop(table.bbox).to_image()
-
-                if extract_tables:
-                    pass
-                    # Find tables
