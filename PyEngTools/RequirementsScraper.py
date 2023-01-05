@@ -2,6 +2,7 @@ import os
 import pdfplumber
 from common import *
 import re
+import pandas as pd
 
 
 # Helper functions
@@ -20,6 +21,42 @@ def _table_to_image(page, table, table_number, save_location, table_resolution=1
     page.crop(table.bbox).to_image(resolution=table_resolution).save(table_filepath)
 
 
+def _create_df(doc_col, heading_col, requirement_col):
+    return pd.DataFrame(columns=[str(doc_col), str(heading_col), str(requirement_col)])
+
+
+def _req_under_heading(previous_heading_tuple, current_heading_tuple, requirement_tuple, last_heading=False):
+    """Function checks if the requirement sits after previous_heading and before current_heading."""
+    if last_heading:
+        if requirement_tuple[0] > current_heading_tuple[1]:
+            return True
+    else:
+        if previous_heading_tuple[1] < requirement_tuple[0] < current_heading_tuple[1]:
+            return True
+        else:
+            return False
+
+
+def _append_to_df(df, doc_name, previous_heading_tuple, current_heading_tuple, requirement_tuple, last_heading=False):
+    """Writes the doc name, heading and requirement to dataframe in accordance with their positions. Treats
+    last heading separately"""
+    new_row = pd.Series()
+
+    if last_heading:
+        if requirement_tuple[0] > current_heading_tuple[0]:
+            heading_text = current_heading_tuple[2]
+            requirement_text = requirement_tuple[2]
+            new_row = pd.Series([doc_name, heading_text, requirement_text])
+
+    else:
+        if previous_heading_tuple[0] < requirement_tuple[0] < current_heading_tuple[0]:
+            heading_text = previous_heading_tuple[2]
+            requirement_text = requirement_tuple[2]
+            new_row = pd.Series([doc_name, heading_text, requirement_text])
+
+    return df.append(new_row, ignore_index=True)
+
+
 class RequirementsScraper:
 
     def __init__(self, input_path, output_path):
@@ -28,19 +65,31 @@ class RequirementsScraper:
 
     @staticmethod
     def search_patterns(preset='TfNSW'):
+
+        """Returns a tuple with chapter headings and requirements strings that can be compiled into
+        a regex object"""
         available_presets = ['TfNSW']
 
         if preset in available_presets:
             if preset == 'TfNSW':
                 chapter_headings = r"(\n\s*\d[.]?\d?[.]?\d?\s+[A-Z].*)"
                 requirements = r"(?sm)^([(]\w{0,4}[)]\s)(.*?)(?=^[(]\w{0,4}[)]\s)"
+                return chapter_headings, requirements
         else:
             print(f"Search pattern preset {preset} not found!")
             return None
 
-    def scrape_pdfs(self, chapter_headings, requirements, table_settings, extract_tables=True):
+    def scrape_pdfs(self, headings_str, requirements_str, table_settings, page_start, page_end, extract_tables=True):
         """Main function to convert document requirements to a dataframe."""
         input_pdfs = detect_input_pdfs(self._input_path)
+
+        # Initiate DataFrame
+
+        doc_col = 'Document'
+        heading_col = 'Heading'
+        requirement_col = 'Requirement Text'
+
+        df = _create_df(doc_col, heading_col, requirement_col)
 
         # Indexes / variables
         table_index = 0
@@ -57,7 +106,7 @@ class RequirementsScraper:
         for input_pdf in input_pdfs:
 
             pdfreader = pdfplumber.open(self._input_path)
-            pages = pdfreader.pages
+            pages = pdfreader.pages[page_start:page_end]
 
             for page in pages:
 
@@ -80,4 +129,33 @@ class RequirementsScraper:
                         _table_to_image(page, table, table_index, self._output_path)
                     all_text += page_text
 
-        # Find strings
+            # Find compile search strings into regex
+
+            headings_re = re.compile(headings_str)
+            requirements_re = re.compile(requirements_str)
+
+            # Empty lists to hold match positions and text
+
+            headings = []
+            requirements = []
+
+            # Return tuples with start position, end position and the text of matches as tuple[0],[1],[2] respectively.
+
+            for match in headings_re.finditer(all_text):
+                headings.append((match.start(), match.end(), match.group()))
+            for match in requirements_re.finditer(all_text):
+                requirements.append((match.start(), match.end(), match.group()))
+
+            # Write to dataframe
+
+            for i, current_heading in enumerate(headings):
+                if i == 0:  # Skip first heading as no previous heading exists
+                    continue
+
+                previous_heading = headings[i - 1]
+
+                for requirement in requirements:
+                    last_heading = i == len(headings) - 1
+                    df = _append_to_df(df, input_pdf, previous_heading, current_heading, requirement,
+                                       last_heading=last_heading)
+
