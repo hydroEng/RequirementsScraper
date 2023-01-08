@@ -3,6 +3,7 @@ import pdfplumber
 from common import *
 import re
 import pandas as pd
+import openpyxl
 
 
 # Helper functions
@@ -25,7 +26,9 @@ def _create_df(doc_col, heading_col, requirement_col):
     return pd.DataFrame(columns=[str(doc_col), str(heading_col), str(requirement_col)])
 
 
-def _req_under_heading(previous_heading_tuple, current_heading_tuple, requirement_tuple, last_heading=False):
+def _req_under_heading(
+        previous_heading_tuple, current_heading_tuple, requirement_tuple, last_heading=False
+):
     """Function checks if the requirement sits after previous_heading and before current_heading."""
     if last_heading:
         if requirement_tuple[0] > current_heading_tuple[1]:
@@ -37,7 +40,14 @@ def _req_under_heading(previous_heading_tuple, current_heading_tuple, requiremen
             return False
 
 
-def _append_to_df(df, doc_name, previous_heading_tuple, current_heading_tuple, requirement_tuple, last_heading=False):
+def _append_to_df(
+        df,
+        doc_name,
+        previous_heading_tuple,
+        current_heading_tuple,
+        requirement_tuple,
+        last_heading=False,
+):
     """Writes the doc name, heading and requirement to dataframe in accordance with their positions. Treats
     last heading separately"""
     new_row = pd.Series()
@@ -57,21 +67,32 @@ def _append_to_df(df, doc_name, previous_heading_tuple, current_heading_tuple, r
     return df.append(new_row, ignore_index=True)
 
 
-class RequirementsScraper:
+def _post_process_sheet(sheet_dir, extract_tables=True, table_folder=None):
+    wb = openpyxl.load_workbook(sheet_dir)
+    ws = wb.active
+    if extract_tables and table_folder is None:
+        raise ValueError('Require a directory for table_folder if extract_tables is True.')
+    if extract_tables:
+        pass
 
+    else:
+        pass
+
+
+class RequirementsScraper:
     def __init__(self, input_path, output_path):
         self._input_path = input_path
         self._output_path = output_path
 
     @staticmethod
-    def search_patterns(preset='TfNSW'):
+    def search_patterns(preset="TfNSW"):
 
         """Returns a tuple with chapter headings and requirements strings that can be compiled into
         a regex object"""
-        available_presets = ['TfNSW']
+        available_presets = ["TfNSW"]
 
         if preset in available_presets:
-            if preset == 'TfNSW':
+            if preset == "TfNSW":
                 chapter_headings = r"(\n\s*\d[.]?\d?[.]?\d?\s+[A-Z].*)"
                 requirements = r"(?sm)^([(]\w{0,4}[)]\s)(.*?)(?=^[(]\w{0,4}[)]\s)"
                 return chapter_headings, requirements
@@ -79,15 +100,23 @@ class RequirementsScraper:
             print(f"Search pattern preset {preset} not found!")
             return None
 
-    def scrape_pdfs(self, headings_str, requirements_str, table_settings, page_start, page_end, extract_tables=True):
+    def scrape_pdfs(
+            self,
+            headings_str,
+            requirements_str,
+            table_settings,
+            page_start,
+            page_end,
+            extract_tables=True,
+    ):
         """Main function to convert document requirements to a dataframe."""
         input_pdfs = detect_input_pdfs(self._input_path)
 
         # Initiate DataFrame
 
-        doc_col = 'Document'
-        heading_col = 'Heading'
-        requirement_col = 'Requirement Text'
+        doc_col = "Document"
+        heading_col = "Heading"
+        requirement_col = "Requirement Text"
 
         df = _create_df(doc_col, heading_col, requirement_col)
 
@@ -156,6 +185,18 @@ class RequirementsScraper:
 
                 for requirement in requirements:
                     last_heading = i == len(headings) - 1
-                    df = _append_to_df(df, input_pdf, previous_heading, current_heading, requirement,
-                                       last_heading=last_heading)
+                    df = _append_to_df(
+                        df,
+                        input_pdf,
+                        previous_heading,
+                        current_heading,
+                        requirement,
+                        last_heading=last_heading,
+                    )
+        return df
 
+    @staticmethod
+    def df_to_excel(df, output_file, table_images=False):
+        delete_dir(output_file)  # Delete output if it doesn't exist already.
+
+        df.to_excel(output_file)

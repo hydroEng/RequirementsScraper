@@ -1,4 +1,6 @@
 import os
+import ocrmypdf
+import shutil
 
 """
 Functions / classes common to all PyEngTools modules
@@ -15,6 +17,19 @@ def detect_input_pdfs(input_path):
             input_pdfs.append(os.path.join(input_path, file))
 
     return input_pdfs
+
+
+def create_dir(directory):
+    """Creates a directory if it does not exist already. If the directory
+    exists, does nothing."""
+
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+
+def delete_dir(directory):
+    if os.path.exists(directory):
+        shutil.rmtree(directory)
 
 
 def table_settings(preset='TfNSW'):
@@ -69,3 +84,14 @@ def pdf_page_margins(page, preset='TfNSW'):
     else:
         print(f"Page margin preset named {preset} not found!")
         return None
+
+
+def ocr_pdfs(pdf_filepaths, output_dir):
+    create_dir(output_dir)
+
+    for pdf in pdf_filepaths:
+        output_path = os.path.join(output_dir, 'OCR_', os.path.basename(pdf))
+        if os.path.exists(output_path):
+            delete_dir(output_path)
+
+        ocrmypdf.ocr(input_file=pdf, output_file=output_path)

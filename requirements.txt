@@ -1,2 +1,4 @@
 pdfplumber~=0.7.6
 pandas~=1.5.2
+ocrmypdf~=14.0.2
+openpyxl~=3.0.10
