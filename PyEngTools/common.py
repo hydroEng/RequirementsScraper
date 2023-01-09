@@ -29,7 +29,7 @@ def create_dir(directory):
 
 def delete_dir(directory):
     if os.path.exists(directory):
-        shutil.rmtree(directory)
+        os.remove(directory)
 
 
 def table_settings(preset='TfNSW'):

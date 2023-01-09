@@ -5,6 +5,8 @@ import re
 import pandas as pd
 import openpyxl
 
+reserved_table_keyword = '@@reserved_table'
+
 
 # Helper functions
 def _extract_table_text(page, table):
@@ -13,7 +15,7 @@ def _extract_table_text(page, table):
 
 
 def _remove_table_text(page_text, table_text, table_number):
-    updated_text = page_text.replace(table_text, f"\n@@reserved Table {table_number}")
+    updated_text = page_text.replace(table_text, f"\n{reserved_table_keyword} Table {table_number}.png")
     return updated_text
 
 
@@ -50,39 +52,87 @@ def _append_to_df(
 ):
     """Writes the doc name, heading and requirement to dataframe in accordance with their positions. Treats
     last heading separately"""
+
     new_row = pd.Series()
+    try:
 
-    if last_heading:
-        if requirement_tuple[0] > current_heading_tuple[0]:
-            heading_text = current_heading_tuple[2]
-            requirement_text = requirement_tuple[2]
-            new_row = pd.Series([doc_name, heading_text, requirement_text])
+        if last_heading:
+            if requirement_tuple[0] > current_heading_tuple[0]:
+                heading_text = current_heading_tuple[2]
+                requirement_text = requirement_tuple[2]
+                new_row = pd.Series([doc_name, heading_text, requirement_text])
 
-    else:
-        if previous_heading_tuple[0] < requirement_tuple[0] < current_heading_tuple[0]:
-            heading_text = previous_heading_tuple[2]
-            requirement_text = requirement_tuple[2]
-            new_row = pd.Series([doc_name, heading_text, requirement_text])
+        else:
+            if previous_heading_tuple[0] < requirement_tuple[0] < current_heading_tuple[0]:
+                heading_text = previous_heading_tuple[2]
+                requirement_text = requirement_tuple[2]
+                new_row = pd.Series([doc_name, heading_text, requirement_text])
+        return df.append(new_row, ignore_index=True)
+    except AttributeError:
+        print("No text found")
 
-    return df.append(new_row, ignore_index=True)
+
+def _find_img_name_in_cell(cell,
+                           img_extension='.png'
+                           ):
+    a = cell.value.find(reserved_table_keyword) + len(reserved_table_keyword)
+    b = cell.value.find(img_extension) + len(img_extension)
+
+    img_name = cell.value[a:b].strip()
+
+    return img_name
 
 
-def _post_process_sheet(sheet_dir, extract_tables=True, table_folder=None):
+def _insert_img_to_cell(img_dir,
+                        cell_text,
+                        cell,
+                        ws
+                        ):
+    img = openpyxl.drawing.Drawing.Image(img_dir)
+    img.anchor = str(cell.coordinate)
+    cell.value = cell_text
+    ws.add_image(img)
+
+
+def _post_process_sheet(
+        sheet_dir,
+        extract_tables=True,
+        img_folder=None,
+        table_text='Inserted_Table'
+):
     wb = openpyxl.load_workbook(sheet_dir)
     ws = wb.active
-    if extract_tables and table_folder is None:
+    if extract_tables and img_folder is None:
         raise ValueError('Require a directory for table_folder if extract_tables is True.')
+
+    # Replace reserved table keyword with an image of the table...
+
     if extract_tables:
-        pass
+        for row in ws.rows:
+            for cell in row:
 
+                if reserved_table_keyword in cell.value:
+                    img_name = _find_img_name_in_cell(cell)
+                    img_dir = os.path.join(img_folder, img_name)
+                    _insert_img_to_cell(img_dir, cell, ws)
+
+    # Else, replace with chosen string table_text
     else:
-        pass
+        for row in ws.rows:
+            for cell in row:
+                if reserved_table_keyword in cell.value:
+                    cell.value = table_text
 
 
-class RequirementsScraper:
-    def __init__(self, input_path, output_path):
-        self._input_path = input_path
+class Scraper:
+    def __init__(self, input_pdf, output_path, temp_folder_name='temp_image_folder'):
+        self._input_path = input_pdf
         self._output_path = output_path
+        self._temp_image_folder = os.path.join(output_path, temp_folder_name)
+        self.__doc_name = "Document"
+        self.__heading1 = "Heading 1"
+        self.__heading2 = "Heading 2"
+        self.__requirement =
 
     @staticmethod
     def search_patterns(preset="TfNSW"):
@@ -100,18 +150,15 @@ class RequirementsScraper:
             print(f"Search pattern preset {preset} not found!")
             return None
 
-    def scrape_pdfs(
+    def scrape_pdf(
             self,
             headings_str,
             requirements_str,
             table_settings,
-            page_start,
-            page_end,
             extract_tables=True,
+            page_margins_preset='TfNSW'
     ):
         """Main function to convert document requirements to a dataframe."""
-        input_pdfs = detect_input_pdfs(self._input_path)
-
         # Initiate DataFrame
 
         doc_col = "Document"
@@ -127,76 +174,81 @@ class RequirementsScraper:
         # Folder for saving images:
 
         if extract_tables:
-            temp_folder = os.path.join(self._output_path(), "table_filepath")
+            temp_folder = os.path.join(self._output_path, self._temp_image_folder)
 
             if not os.path.exists(temp_folder):
                 os.makedirs(temp_folder)
 
-        for input_pdf in input_pdfs:
+        # Main function
+        pdfreader = pdfplumber.open(self._input_path)
+        pages = pdfreader.pages
 
-            pdfreader = pdfplumber.open(self._input_path)
-            pages = pdfreader.pages[page_start:page_end]
+        for page in pages:
 
-            for page in pages:
+            page_margins = pdf_page_margins(page, preset=page_margins_preset)
 
-                page_margins = pdf_page_margins(page)
+            # Crop header, extract text, locate tables to extract
+            # later/remove text
+            # page = page.crop(page_margins)
+            page_text = page.extract_text()
+            tables = page.find_tables()
 
-                # Crop header, extract text, locate tables to extract
-                # later/remove text
-                page = page.crop(page_margins)
-                page_text = page.extract_text()
-                tables = page.find_tables()
+            # Extract text from page, remove text from page, extract table
+            # to image if extract_tables=True, add to all_text
+            for table in tables:
+                table_index += 1
+                table_text = _extract_table_text(page, table)
+                page_text = _remove_table_text(page_text, table_text, table_index)
 
-                # Extract text from page, remove text from page, extract table
-                # to image if extract_tables=True, add to all_text
-                for table in tables:
-                    table_index += 1
-                    table_text = _extract_table_text(page, table)
-                    page_text = _remove_table_text(page_text, table_text, table_index)
+                if extract_tables:
+                    _table_to_image(page, table, table_index, self._temp_image_folder)
+                all_text += page_text
 
-                    if extract_tables:
-                        _table_to_image(page, table, table_index, self._output_path)
-                    all_text += page_text
+        # Find compile search strings into regex
 
-            # Find compile search strings into regex
+        headings_re = re.compile(headings_str)
+        requirements_re = re.compile(requirements_str)
 
-            headings_re = re.compile(headings_str)
-            requirements_re = re.compile(requirements_str)
+        # Empty lists to hold match positions and text
 
-            # Empty lists to hold match positions and text
+        headings = []
+        requirements = []
 
-            headings = []
-            requirements = []
+        # Return tuples with start position, end position and the text of matches as tuple[0],[1],[2] respectively.
 
-            # Return tuples with start position, end position and the text of matches as tuple[0],[1],[2] respectively.
+        for match in headings_re.finditer(all_text):
+            headings.append((match.start(), match.end(), match.group()))
+        for match in requirements_re.finditer(all_text):
+            requirements.append((match.start(), match.end(), match.group()))
 
-            for match in headings_re.finditer(all_text):
-                headings.append((match.start(), match.end(), match.group()))
-            for match in requirements_re.finditer(all_text):
-                requirements.append((match.start(), match.end(), match.group()))
+        # Write to dataframe
 
-            # Write to dataframe
+        for i, current_heading in enumerate(headings):
+            if i == 0:  # Skip first heading as no previous heading exists
+                continue
 
-            for i, current_heading in enumerate(headings):
-                if i == 0:  # Skip first heading as no previous heading exists
-                    continue
+            previous_heading = headings[i - 1]
 
-                previous_heading = headings[i - 1]
+            for requirement in requirements:
+                last_heading = i == len(headings) - 1
+                df = _append_to_df(
+                    df,
+                    self._input_path,
+                    previous_heading,
+                    current_heading,
+                    requirement,
+                    last_heading=last_heading,
+                )
 
-                for requirement in requirements:
-                    last_heading = i == len(headings) - 1
-                    df = _append_to_df(
-                        df,
-                        input_pdf,
-                        previous_heading,
-                        current_heading,
-                        requirement,
-                        last_heading=last_heading,
-                    )
         return df
 
-    @staticmethod
-    def df_to_excel(df, output_file, table_images=False):
+    def df_to_excel(self, df, output_file, table_images=False):
+        """Convert requirements dataframe to Excel file. Only
+        use after generating dataframe using scrape_pdf()
+        Overwrites output_file."""
+
         delete_dir(output_file)  # Delete output if it doesn't exist already.
 
         df.to_excel(output_file)
+
+        _post_process_sheet(output_file, img_folder=self._temp_image_folder)
