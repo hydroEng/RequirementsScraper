@@ -58,7 +58,7 @@ def _insert_img_to_cell(img_dir,
                         cell,
                         ws
                         ):
-    img = openpyxl.drawing.Drawing.Image(img_dir)
+    img = openpyxl.drawing.image.Image(img_dir)
     img.anchor = str(cell.coordinate)
     cell.value = cell_text
     ws.add_image(img)
@@ -87,23 +87,6 @@ def _post_process_sheet(
                         _insert_img_to_cell(img_dir, table_text, cell, ws)
                     else:
                         cell.value = table_text
-
-    # if cell != None:
-    #     if extract_tables:
-    #         for row in ws.rows:
-    #             for cell in row:
-    #
-    #                 if reserved_table_keyword in cell.value:
-    #                     img_name = _find_img_name_in_cell(cell)
-    #                     img_dir = os.path.join(img_folder, img_name)
-    #                     _insert_img_to_cell(img_dir, cell, ws)
-    #
-    #     # Else, replace with chosen string table_text
-    #     else:
-    #         for row in ws.rows:
-    #             for cell in row:
-    #                 if reserved_table_keyword in cell.value:
-    #                     cell.value = table_text
 
 
 class Scraper:
@@ -208,6 +191,7 @@ class Scraper:
         # Write to dataframe
 
         for i, current_heading in enumerate(headings):
+            print('1')
             if i == 0:  # Skip first heading as no previous heading exists
                 continue
 
