@@ -24,8 +24,8 @@ def _table_to_image(page, table, table_number, save_location, table_resolution=1
     page.crop(table.bbox).to_image(resolution=table_resolution).save(table_filepath)
 
 
-def _create_df(doc_col, heading_col, requirement_col):
-    return pd.DataFrame(columns=[str(doc_col), str(heading_col), str(requirement_col)])
+def _create_df(doc_col, heading1_col, heading2_col, requirement_col):
+    return pd.DataFrame(columns=[str(doc_col), str(heading1_col), str(heading2_col), str(requirement_col)])
 
 
 def _req_under_heading(
@@ -40,36 +40,6 @@ def _req_under_heading(
             return True
         else:
             return False
-
-
-def _append_to_df(
-        df,
-        doc_name,
-        previous_heading_tuple,
-        current_heading_tuple,
-        requirement_tuple,
-        last_heading=False,
-):
-    """Writes the doc name, heading and requirement to dataframe in accordance with their positions. Treats
-    last heading separately"""
-
-    new_row = pd.Series()
-    try:
-
-        if last_heading:
-            if requirement_tuple[0] > current_heading_tuple[0]:
-                heading_text = current_heading_tuple[2]
-                requirement_text = requirement_tuple[2]
-                new_row = pd.Series([doc_name, heading_text, requirement_text])
-
-        else:
-            if previous_heading_tuple[0] < requirement_tuple[0] < current_heading_tuple[0]:
-                heading_text = previous_heading_tuple[2]
-                requirement_text = requirement_tuple[2]
-                new_row = pd.Series([doc_name, heading_text, requirement_text])
-        return df.append(new_row, ignore_index=True)
-    except AttributeError:
-        print("No text found")
 
 
 def _find_img_name_in_cell(cell,
@@ -107,21 +77,33 @@ def _post_process_sheet(
 
     # Replace reserved table keyword with an image of the table...
 
-    if extract_tables:
-        for row in ws.rows:
-            for cell in row:
+    for row in ws.rows:
+        for cell in row:
+            if cell.value is not None:
+                if reserved_table_keyword in str(cell.value):
+                    if extract_tables:
+                        img_name = _find_img_name_in_cell(cell)
+                        img_dir = os.path.join(img_folder, img_name)
+                        _insert_img_to_cell(img_dir, table_text, cell, ws)
+                    else:
+                        cell.value = table_text
 
-                if reserved_table_keyword in cell.value:
-                    img_name = _find_img_name_in_cell(cell)
-                    img_dir = os.path.join(img_folder, img_name)
-                    _insert_img_to_cell(img_dir, cell, ws)
-
-    # Else, replace with chosen string table_text
-    else:
-        for row in ws.rows:
-            for cell in row:
-                if reserved_table_keyword in cell.value:
-                    cell.value = table_text
+    # if cell != None:
+    #     if extract_tables:
+    #         for row in ws.rows:
+    #             for cell in row:
+    #
+    #                 if reserved_table_keyword in cell.value:
+    #                     img_name = _find_img_name_in_cell(cell)
+    #                     img_dir = os.path.join(img_folder, img_name)
+    #                     _insert_img_to_cell(img_dir, cell, ws)
+    #
+    #     # Else, replace with chosen string table_text
+    #     else:
+    #         for row in ws.rows:
+    #             for cell in row:
+    #                 if reserved_table_keyword in cell.value:
+    #                     cell.value = table_text
 
 
 class Scraper:
@@ -129,10 +111,12 @@ class Scraper:
         self._input_path = input_pdf
         self._output_path = output_path
         self._temp_image_folder = os.path.join(output_path, temp_folder_name)
-        self.__doc_name = "Document"
+
+        # Dataframe Columns
+        self.__doc_col = "Document"
         self.__heading1 = "Heading 1"
         self.__heading2 = "Heading 2"
-        self.__requirement =
+        self.__requirement = "Requirement Text"
 
     @staticmethod
     def search_patterns(preset="TfNSW"):
@@ -165,7 +149,7 @@ class Scraper:
         heading_col = "Heading"
         requirement_col = "Requirement Text"
 
-        df = _create_df(doc_col, heading_col, requirement_col)
+        df = _create_df(self.__doc_col, self.__heading1, self.__heading2, self.__requirement)
 
         # Indexes / variables
         table_index = 0
@@ -231,13 +215,12 @@ class Scraper:
 
             for requirement in requirements:
                 last_heading = i == len(headings) - 1
-                df = _append_to_df(
+                df = self._append_to_df(
                     df,
-                    self._input_path,
                     previous_heading,
                     current_heading,
                     requirement,
-                    last_heading=last_heading,
+                    last_heading=last_heading
                 )
 
         return df
@@ -252,3 +235,32 @@ class Scraper:
         df.to_excel(output_file)
 
         _post_process_sheet(output_file, img_folder=self._temp_image_folder)
+
+    def _append_to_df(self,
+                      df,
+                      previous_heading_tuple,
+                      current_heading_tuple,
+                      requirement_tuple,
+                      last_heading=False,
+                      ):
+        """Writes the doc name, heading and requirement to dataframe in accordance with their positions. Treats
+        last heading separately"""
+
+        if last_heading:
+            if requirement_tuple[0] > current_heading_tuple[0]:
+                heading_text = current_heading_tuple[2]
+                requirement_text = requirement_tuple[2]
+                new_row = pd.DataFrame(
+                    {self.__doc_col: [self._input_path], self.__heading1: [heading_text], self.__heading2: [""],
+                     self.__requirement: [requirement_text]})
+
+                return pd.concat([df, new_row])
+        else:
+            if previous_heading_tuple[0] < requirement_tuple[0] < current_heading_tuple[0]:
+                heading_text = previous_heading_tuple[2]
+                requirement_text = requirement_tuple[2]
+                new_row = pd.DataFrame(
+                    {self.__doc_col: [self._input_path], self.__heading1: [heading_text], self.__heading2: [""],
+                     self.__requirement: [requirement_text]})
+
+                return pd.concat([df, new_row])
