@@ -101,8 +101,8 @@ class Scraper:
         self.__heading2 = "Heading 2"
         self.__requirement = "Requirement Text"
 
-    @staticmethod
-    def search_patterns(preset="TfNSW"):
+    @classmethod
+    def search_patterns(cls, preset="TfNSW"):
 
         """Returns a tuple with chapter headings and requirements strings that can be compiled into
         a regex object"""
@@ -169,10 +169,10 @@ class Scraper:
 
                 if extract_tables:
                     _table_to_image(page, table, table_index, self._temp_image_folder)
-                all_text += page_text
+            all_text += page_text
 
         # Find compile search strings into regex
-
+        print(all_text)
         headings_re = re.compile(headings_str)
         requirements_re = re.compile(requirements_str)
 
@@ -191,7 +191,6 @@ class Scraper:
         # Write to dataframe
 
         for i, current_heading in enumerate(headings):
-            print('1')
             if i == 0:  # Skip first heading as no previous heading exists
                 continue
 
@@ -209,7 +208,7 @@ class Scraper:
 
         return df
 
-    def df_to_excel(self, df, output_file, table_images=False):
+    def df_to_excel(self, df, output_file, extract_tables=False):
         """Convert requirements dataframe to Excel file. Only
         use after generating dataframe using scrape_pdf()
         Overwrites output_file."""
@@ -218,7 +217,7 @@ class Scraper:
 
         df.to_excel(output_file)
 
-        _post_process_sheet(output_file, img_folder=self._temp_image_folder)
+        _post_process_sheet(output_file, img_folder=self._temp_image_folder, extract_tables=extract_tables)
 
     def _append_to_df(self,
                       df,
@@ -229,7 +228,7 @@ class Scraper:
                       ):
         """Writes the doc name, heading and requirement to dataframe in accordance with their positions. Treats
         last heading separately"""
-
+        df_concat = df
         if last_heading:
             if requirement_tuple[0] > current_heading_tuple[0]:
                 heading_text = current_heading_tuple[2]
@@ -238,7 +237,8 @@ class Scraper:
                     {self.__doc_col: [self._input_path], self.__heading1: [heading_text], self.__heading2: [""],
                      self.__requirement: [requirement_text]})
 
-                return pd.concat([df, new_row])
+                df_concat = pd.concat([df, new_row])
+
         else:
             if previous_heading_tuple[0] < requirement_tuple[0] < current_heading_tuple[0]:
                 heading_text = previous_heading_tuple[2]
@@ -247,4 +247,30 @@ class Scraper:
                     {self.__doc_col: [self._input_path], self.__heading1: [heading_text], self.__heading2: [""],
                      self.__requirement: [requirement_text]})
 
-                return pd.concat([df, new_row])
+                df_concat = pd.concat([df, new_row])
+
+        return df_concat
+
+    def dump_text(self):
+        all_text = ""
+        table_index = 0
+
+        pdf = pdfplumber.open(self._input_path)
+        pages = pdf.pages
+
+        for page in pages:
+            # Crop header, extract text, locate tables to extract
+            # later/remove text
+            # page = page.crop(page_margins)
+            page_text = page.extract_text()
+            tables = page.find_tables()
+
+            # Extract text from page, remove text from page, extract table
+            # to image if extract_tables=True, add to all_text
+            for table in tables:
+                table_index += 1
+                table_text = _extract_table_text(page, table)
+                page_text = _remove_table_text(page_text, table_text, table_index)
+            all_text += page_text
+
+        return all_text
