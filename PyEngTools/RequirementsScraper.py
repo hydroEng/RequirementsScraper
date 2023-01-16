@@ -110,7 +110,7 @@ class Scraper:
 
         if preset in available_presets:
             if preset == "TfNSW":
-                chapter_headings = r"(\n\s*\d[.]?\d?[.]?\d?\s+[A-Z].*)"
+                chapter_headings = r"(\s*\n\s*\d[.]?\d?[.]?\d?\s+[A-Z].*)"
                 requirements = r"(?sm)^([(]\w{0,4}[)]\s)(.*?)(?=^[(]\w{0,4}[)]\s)"
                 return chapter_headings, requirements
         else:
@@ -172,7 +172,6 @@ class Scraper:
             all_text += page_text
 
         # Find compile search strings into regex
-        print(all_text)
         headings_re = re.compile(headings_str)
         requirements_re = re.compile(requirements_str)
 
@@ -185,9 +184,10 @@ class Scraper:
 
         for match in headings_re.finditer(all_text):
             headings.append((match.start(), match.end(), match.group()))
+
         for match in requirements_re.finditer(all_text):
             requirements.append((match.start(), match.end(), match.group()))
-
+        print(headings, requirements, sep="\n\n")
         # Write to dataframe
 
         for i, current_heading in enumerate(headings):
