@@ -106,13 +106,20 @@ class Scraper:
 
         """Returns a tuple with chapter headings and requirements strings that can be compiled into
         a regex object"""
-        available_presets = ["TfNSW"]
+        available_presets = ["TfNSW", "RMS QA SPEC"]
 
         if preset in available_presets:
+            chapter_headings = ""
+            requirements = ""
+
             if preset == "TfNSW":
                 chapter_headings = r"(\s*\n\s*\d[.]?\d?[.]?\d?\s+[A-Z].*)"
                 requirements = r"(?sm)^([(]\w{0,4}[)]\s)(.*?)(?=^[(]\w{0,4}[)]\s)"
-                return chapter_headings, requirements
+
+            if preset == "RMS QA SPEC":
+                chapter_headings = r"(?m)^\d[.]?[^\n]*"
+                requirements = r"\n[A-Z][^\n]*"
+            return chapter_headings, requirements
         else:
             print(f"Search pattern preset {preset} not found!")
             return None
