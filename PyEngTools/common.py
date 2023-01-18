@@ -80,7 +80,7 @@ def pdf_page_margins(page, preset='TfNSW'):
     if preset in available_presets:
         if preset == 'TfNSW':
             page_margins = (0, 50, width, height - 70)
-
+        return page_margins
     else:
         print(f"Page margin preset named {preset} not found!")
         return None

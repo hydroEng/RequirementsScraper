@@ -118,7 +118,7 @@ class Scraper:
 
             if preset == "RMS QA SPEC":
                 chapter_headings = r"(?m)^\d[.]?[^\n]*"
-                requirements = r"\n[A-Z][^\n]*"
+                requirements = r"(?sm)^[A-Z].*?(?=^[A-Z])"
             return chapter_headings, requirements
         else:
             print(f"Search pattern preset {preset} not found!")
@@ -163,7 +163,7 @@ class Scraper:
 
             # Crop header, extract text, locate tables to extract
             # later/remove text
-            # page = page.crop(page_margins)
+            page = page.crop(page_margins)
             page_text = page.extract_text()
             tables = page.find_tables()
 
@@ -194,7 +194,7 @@ class Scraper:
 
         for match in requirements_re.finditer(all_text):
             requirements.append((match.start(), match.end(), match.group()))
-        print(headings, requirements, sep="\n\n")
+        print(headings, requirements)
         # Write to dataframe
 
         for i, current_heading in enumerate(headings):
@@ -204,6 +204,7 @@ class Scraper:
             previous_heading = headings[i - 1]
 
             for requirement in requirements:
+
                 last_heading = i == len(headings) - 1
                 df = self._append_to_df(
                     df,
@@ -236,10 +237,11 @@ class Scraper:
         """Writes the doc name, heading and requirement to dataframe in accordance with their positions. Treats
         last heading separately"""
         df_concat = df
+
+        requirement_text = requirement_tuple[2].replace("\n", " ")
         if last_heading:
             if requirement_tuple[0] > current_heading_tuple[0]:
                 heading_text = current_heading_tuple[2]
-                requirement_text = requirement_tuple[2]
                 new_row = pd.DataFrame(
                     {self.__doc_col: [self._input_path], self.__heading1: [heading_text], self.__heading2: [""],
                      self.__requirement: [requirement_text]})
@@ -249,7 +251,6 @@ class Scraper:
         else:
             if previous_heading_tuple[0] < requirement_tuple[0] < current_heading_tuple[0]:
                 heading_text = previous_heading_tuple[2]
-                requirement_text = requirement_tuple[2]
                 new_row = pd.DataFrame(
                     {self.__doc_col: [self._input_path], self.__heading1: [heading_text], self.__heading2: [""],
                      self.__requirement: [requirement_text]})
@@ -258,17 +259,20 @@ class Scraper:
 
         return df_concat
 
-    def dump_text(self):
+    def dump_text(self, page_margins_preset='TfNSW'):
         all_text = ""
         table_index = 0
 
         pdf = pdfplumber.open(self._input_path)
         pages = pdf.pages
 
+
+
         for page in pages:
             # Crop header, extract text, locate tables to extract
             # later/remove text
-            # page = page.crop(page_margins)
+            page_margins = pdf_page_margins(page, page_margins_preset)
+            page = page.crop(page_margins)
             page_text = page.extract_text()
             tables = page.find_tables()
 
