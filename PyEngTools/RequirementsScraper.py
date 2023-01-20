@@ -118,7 +118,9 @@ class Scraper:
 
             if preset == "RMS QA SPEC":
                 chapter_headings = r"(?m)^\d[.]?[^\n]*"
-                requirements = r"(?sm)^[A-Z].*?(?=^[A-Z])"
+                requirements = r"(?sm)^\s*([A-Z]|[(]\w*[)]).*?([.:]\s*\n)"
+
+
             return chapter_headings, requirements
         else:
             print(f"Search pattern preset {preset} not found!")
