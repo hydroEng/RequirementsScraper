@@ -5,7 +5,7 @@ import re
 import pandas as pd
 import openpyxl
 
-reserved_table_keyword = '@@reserved_table'
+reserved_table_keyword = 'REServed_table'
 
 
 # Helper functions
@@ -15,12 +15,12 @@ def _extract_table_text(page, table):
 
 
 def _remove_table_text(page_text, table_text, table_number):
-    updated_text = page_text.replace(table_text, f"\n{reserved_table_keyword} Table {table_number}.png")
+    updated_text = page_text.replace(table_text, f".\n{reserved_table_keyword} TABLE {table_number}.png.\n")
     return updated_text
 
 
-def _table_to_image(page, table, table_number, save_location, table_resolution=100):
-    table_filepath = os.path.join(save_location, f"TABLE {table_number}.png")
+def _table_to_image(page, table, table_number, save_location, table_resolution=100, img_extension='png'):
+    table_filepath = os.path.join(save_location, f"TABLE {table_number}.{img_extension}")
     page.crop(table.bbox).to_image(resolution=table_resolution).save(table_filepath)
 
 
@@ -60,7 +60,6 @@ def _insert_img_to_cell(img_dir,
                         ):
     img = openpyxl.drawing.image.Image(img_dir)
     img.anchor = str(cell.coordinate)
-    cell.value = cell_text
     ws.add_image(img)
 
 
@@ -85,8 +84,8 @@ def _post_process_sheet(
                         img_name = _find_img_name_in_cell(cell)
                         img_dir = os.path.join(img_folder, img_name)
                         _insert_img_to_cell(img_dir, table_text, cell, ws)
-                    else:
-                        cell.value = table_text
+                cell.value = str(cell.value).replace(reserved_table_keyword, table_text)
+    wb.save("dataframe.xlsx")
 
 
 class Scraper:
@@ -102,26 +101,39 @@ class Scraper:
         self.__requirement = "Requirement Text"
 
     @classmethod
-    def search_patterns(cls, preset="TfNSW"):
+    def requirement_patterns(cls, preset='General'):
 
-        """Returns a tuple with chapter headings and requirements strings that can be compiled into
+        available_presets = ["General", "TfNSW"]
+
+        if preset in available_presets:
+
+            requirements = ""
+
+            if preset == "General":
+                requirements = r"(?sm)^\s*([A-Z]\D|[(]\w*[)]).*?([.:;]\s*\n)"
+            if preset == "TfNSW":
+                requirements = r"(?sm)^([(]\w{0,4}[)]\s)(.*?)(?=^[(]\w{0,4}[)]\s)"
+            return requirements
+        else:
+            print(f"Search pattern preset {preset} not found!")
+            return None
+
+    @classmethod
+    def heading_patterns(cls, preset="TfNSW"):
+        """Returns a string that matches headings which may be compiled into
         a regex object"""
         available_presets = ["TfNSW", "RMS QA SPEC"]
 
         if preset in available_presets:
             chapter_headings = ""
-            requirements = ""
 
             if preset == "TfNSW":
                 chapter_headings = r"(\s*\n\s*\d[.]?\d?[.]?\d?\s+[A-Z].*)"
-                requirements = r"(?sm)^([(]\w{0,4}[)]\s)(.*?)(?=^[(]\w{0,4}[)]\s)"
 
             if preset == "RMS QA SPEC":
-                chapter_headings = r"(?m)^\d[.]?[^\n]*"
-                requirements = r"(?sm)^\s*([A-Z]|[(]\w*[)]).*?([.:]\s*\n)"
+                chapter_headings = r"(?m)((^\s*[A-Z]\d)|(^\d[.]?))([^\n].*)"
 
-
-            return chapter_headings, requirements
+            return chapter_headings
         else:
             print(f"Search pattern preset {preset} not found!")
             return None
@@ -181,6 +193,8 @@ class Scraper:
             all_text += page_text
 
         # Find compile search strings into regex
+        all_text = remove_cid_text(all_text)
+
         headings_re = re.compile(headings_str)
         requirements_re = re.compile(requirements_str)
 
@@ -196,7 +210,6 @@ class Scraper:
 
         for match in requirements_re.finditer(all_text):
             requirements.append((match.start(), match.end(), match.group()))
-        print(headings, requirements)
         # Write to dataframe
 
         for i, current_heading in enumerate(headings):
@@ -206,7 +219,6 @@ class Scraper:
             previous_heading = headings[i - 1]
 
             for requirement in requirements:
-
                 last_heading = i == len(headings) - 1
                 df = self._append_to_df(
                     df,
@@ -223,7 +235,7 @@ class Scraper:
         use after generating dataframe using scrape_pdf()
         Overwrites output_file."""
 
-        delete_dir(output_file)  # Delete output if it doesn't exist already.
+        delete_file(output_file)  # Delete output if it doesn't exist already.
 
         df.to_excel(output_file)
 
@@ -239,13 +251,14 @@ class Scraper:
         """Writes the doc name, heading and requirement to dataframe in accordance with their positions. Treats
         last heading separately"""
         df_concat = df
+        doc_name = os.path.basename(self._input_path)
 
         requirement_text = requirement_tuple[2].replace("\n", " ")
         if last_heading:
             if requirement_tuple[0] > current_heading_tuple[0]:
                 heading_text = current_heading_tuple[2]
                 new_row = pd.DataFrame(
-                    {self.__doc_col: [self._input_path], self.__heading1: [heading_text], self.__heading2: [""],
+                    {self.__doc_col: [doc_name], self.__heading1: [heading_text], self.__heading2: [""],
                      self.__requirement: [requirement_text]})
 
                 df_concat = pd.concat([df, new_row])
@@ -254,7 +267,7 @@ class Scraper:
             if previous_heading_tuple[0] < requirement_tuple[0] < current_heading_tuple[0]:
                 heading_text = previous_heading_tuple[2]
                 new_row = pd.DataFrame(
-                    {self.__doc_col: [self._input_path], self.__heading1: [heading_text], self.__heading2: [""],
+                    {self.__doc_col: [doc_name], self.__heading1: [heading_text], self.__heading2: [""],
                      self.__requirement: [requirement_text]})
 
                 df_concat = pd.concat([df, new_row])
@@ -267,8 +280,6 @@ class Scraper:
 
         pdf = pdfplumber.open(self._input_path)
         pages = pdf.pages
-
-
 
         for page in pages:
             # Crop header, extract text, locate tables to extract
@@ -285,5 +296,5 @@ class Scraper:
                 table_text = _extract_table_text(page, table)
                 page_text = _remove_table_text(page_text, table_text, table_index)
             all_text += page_text
-
+        all_text = remove_cid_text(all_text)
         return all_text

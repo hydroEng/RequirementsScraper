@@ -1,6 +1,7 @@
 import os
 import ocrmypdf
 import shutil
+import re
 
 """
 Functions / classes common to all PyEngTools modules
@@ -27,9 +28,14 @@ def create_dir(directory):
         os.makedirs(directory)
 
 
+def delete_file(file_dir):
+    if os.path.exists(file_dir):
+        os.remove(file_dir)
+
+
 def delete_dir(directory):
     if os.path.exists(directory):
-        os.remove(directory)
+        shutil.rmtree(directory)
 
 
 def table_settings(preset='TfNSW'):
@@ -79,7 +85,7 @@ def pdf_page_margins(page, preset='TfNSW'):
 
     if preset in available_presets:
         if preset == 'TfNSW':
-            page_margins = (0, 50, width, height - 70)
+            page_margins = (0, 57, width, height - 70)
         return page_margins
     else:
         print(f"Page margin preset named {preset} not found!")
@@ -87,11 +93,22 @@ def pdf_page_margins(page, preset='TfNSW'):
 
 
 def ocr_pdfs(pdf_filepaths, output_dir):
-    create_dir(output_dir)
+    output_folder = os.path.join(output_dir, 'OCR_')
+
+    delete_dir(output_folder)
+    create_dir(output_folder)
 
     for pdf in pdf_filepaths:
-        output_path = os.path.join(output_dir, 'OCR_', os.path.basename(pdf))
-        if os.path.exists(output_path):
-            delete_dir(output_path)
+        output_file = os.path.join(output_folder, os.path.basename(pdf))
 
-        ocrmypdf.ocr(input_file=pdf, output_file=output_path)
+        if os.path.exists(output_file):
+            delete_dir(output_file)
+
+        ocrmypdf.ocr(input_file=pdf, output_file=output_file, skip_text=True)
+
+
+def remove_cid_text(text: str):
+    """ Doing OCR of PDF introduces strings of pattern (cid:[digits]). Should be deleted
+    before output"""
+
+    return re.sub(r"(\(cid:\d*\))", "", text)
