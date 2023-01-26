@@ -1,13 +1,19 @@
 **Introduction**
 
-PyEngTools is a collection of python modules aimed at helping civil (and other) engineers automate some of their work. 
+RequirementsScraper is a software that allows you to scrape engineering requirements from briefs sent by clients. 
 
-This library is specific to the engineering workplace in Australia, and therefore, many of the tools (eventually) written in this library be most relevant in the context of an Australian engineering workplace. 
+Although this application has Australian engineering practices in mind, the backend logic is fairly extensible and may work on a wide number of documents with a little tweaking. 
 
-**Current Modules**
+Currently this application is under development. Check back soon!
 
-  + RequirementsScraper - Converts requirements briefs from clients into a trackable excel spreadsheet. 
+**Milestones:**
+- [x] Write backend logic
+- [ ] Write unit tests
+- [ ] Revise to pass tests
+- [ ] Finalize comments / documentation of backend
+- [ ] Begin work on GUI
+- [ ] ...and more!
 
-This open source library is developed by Turnbull Engineering. 
+This open source application is developed by Turnbull Engineering. 
 
 ![TE Logo](https://raw.githubusercontent.com/suryaya/PyEngTools/master/TElogo.png)
