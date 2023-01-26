@@ -88,11 +88,56 @@ def _post_process_sheet(
     wb.save("dataframe.xlsx")
 
 
+def _df_to_excel(df, output_file, extract_tables=False):
+    temp_image_folder = os.getcwd()
+
+    delete_file(output_file)
+    df.to_excel(output_file)
+    _post_process_sheet(output_file, extract_tables=extract_tables, img_folder=temp_image_folder)
+
+
+# Methods to be accessed via the RequirementsScraper class
+
+def requirement_patterns(preset='General'):
+    available_presets = ["General", "TfNSW"]
+
+    if preset in available_presets:
+
+        requirements = ""
+
+        if preset == "General":
+            requirements = r"(?sm)^\s*([A-Z]\D|[(]\w*[)]).*?([.:;]\s*\n)"
+        if preset == "TfNSW":
+            requirements = r"(?sm)^([(]\w{0,4}[)]\s)(.*?)(?=^[(]\w{0,4}[)]\s)"
+        return requirements
+    else:
+        print(f"Search pattern preset {preset} not found!")
+        return None
+
+
+def heading_patterns(preset="TfNSW"):
+    """Returns a string that matches headings which may be compiled into
+    a regex object"""
+    available_presets = ["TfNSW", "RMS QA SPEC"]
+
+    if preset in available_presets:
+        chapter_headings = ""
+
+        if preset == "TfNSW":
+            chapter_headings = r"(\s*\n\s*\d[.]?\d?[.]?\d?\s+[A-Z].*)"
+
+        if preset == "RMS QA SPEC":
+            chapter_headings = r"(?m)((^\s*[A-Z]\d)|(^\d[.]?))([^\n].*)"
+
+        return chapter_headings
+    else:
+        print(f"Search pattern preset {preset} not found!")
+        return None
+
+
 class Scraper:
-    def __init__(self, input_pdf, output_path, temp_folder_name='temp_image_folder'):
+    def __init__(self, input_pdf):
         self._input_path = input_pdf
-        self._output_path = output_path
-        self._temp_image_folder = os.path.join(output_path, temp_folder_name)
 
         # Dataframe Columns
         self.__doc_col = "Document"
@@ -100,49 +145,15 @@ class Scraper:
         self.__heading2 = "Heading 2"
         self.__requirement = "Requirement Text"
 
-    @classmethod
-    def requirement_patterns(cls, preset='General'):
+        # Temporary folder for saving images
 
-        available_presets = ["General", "TfNSW"]
-
-        if preset in available_presets:
-
-            requirements = ""
-
-            if preset == "General":
-                requirements = r"(?sm)^\s*([A-Z]\D|[(]\w*[)]).*?([.:;]\s*\n)"
-            if preset == "TfNSW":
-                requirements = r"(?sm)^([(]\w{0,4}[)]\s)(.*?)(?=^[(]\w{0,4}[)]\s)"
-            return requirements
-        else:
-            print(f"Search pattern preset {preset} not found!")
-            return None
-
-    @classmethod
-    def heading_patterns(cls, preset="TfNSW"):
-        """Returns a string that matches headings which may be compiled into
-        a regex object"""
-        available_presets = ["TfNSW", "RMS QA SPEC"]
-
-        if preset in available_presets:
-            chapter_headings = ""
-
-            if preset == "TfNSW":
-                chapter_headings = r"(\s*\n\s*\d[.]?\d?[.]?\d?\s+[A-Z].*)"
-
-            if preset == "RMS QA SPEC":
-                chapter_headings = r"(?m)((^\s*[A-Z]\d)|(^\d[.]?))([^\n].*)"
-
-            return chapter_headings
-        else:
-            print(f"Search pattern preset {preset} not found!")
-            return None
+        self.__temp_image_folder = os.getcwd()
 
     def scrape_pdf(
             self,
             headings_str,
             requirements_str,
-            table_settings,
+            # table_settings,
             extract_tables=True,
             page_margins_preset='TfNSW'
     ):
@@ -162,10 +173,9 @@ class Scraper:
         # Folder for saving images:
 
         if extract_tables:
-            temp_folder = os.path.join(self._output_path, self._temp_image_folder)
 
-            if not os.path.exists(temp_folder):
-                os.makedirs(temp_folder)
+            if not os.path.exists(self.__temp_image_folder):
+                os.makedirs(self.__temp_image_folder)
 
         # Main function
         pdfreader = pdfplumber.open(self._input_path)
@@ -189,7 +199,7 @@ class Scraper:
                 page_text = _remove_table_text(page_text, table_text, table_index)
 
                 if extract_tables:
-                    _table_to_image(page, table, table_index, self._temp_image_folder)
+                    _table_to_image(page, table, table_index, self.__temp_image_folder)
             all_text += page_text
 
         # Find compile search strings into regex
@@ -230,16 +240,13 @@ class Scraper:
 
         return df
 
-    def df_to_excel(self, df, output_file, extract_tables=False):
+    @staticmethod
+    def df_to_excel(df, output_file, extract_tables=False):
         """Convert requirements dataframe to Excel file. Only
         use after generating dataframe using scrape_pdf()
         Overwrites output_file."""
 
-        delete_file(output_file)  # Delete output if it doesn't exist already.
-
-        df.to_excel(output_file)
-
-        _post_process_sheet(output_file, img_folder=self._temp_image_folder, extract_tables=extract_tables)
+        _df_to_excel(df, output_file, extract_tables=extract_tables)
 
     def _append_to_df(self,
                       df,

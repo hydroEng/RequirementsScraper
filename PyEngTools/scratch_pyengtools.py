@@ -25,27 +25,24 @@ def subroutine():
     df = pd.DataFrame()
     for file in os.listdir(input_path):
         if file.endswith('.pdf'):
-            scraper = RequirementsScraper.Scraper(input_pdf=os.path.join(input_path, file),
-                                                  output_path=output_path)
+            scraper = RequirementsScraper.Scraper(input_pdf=os.path.join(input_path, file))
 
-            headings = scraper.heading_patterns(preset="TfNSW")
-            requirements = scraper.requirement_patterns(preset='General')
+            headings = RequirementsScraper.heading_patterns(preset="TfNSW")
+            requirements = RequirementsScraper.requirement_patterns(preset='General')
 
             table_settings = common.table_settings()
 
             df1 = scraper.scrape_pdf(headings_str=headings,
-                                    requirements_str=requirements,
-                                    table_settings=table_settings,
-                                    extract_tables=False)
-            df = pd.concat([df,df1],ignore_index=True)
+                                     requirements_str=requirements,
+                                     extract_tables=False)
+            df = pd.concat([df, df1], ignore_index=True)
 
     scraper.df_to_excel(df, 'dataframe.xlsx', extract_tables=False)
     # scraper.df_to_excel(df, 'dataframe.xlsx')
 
 
 def textroutine():
-    scraper = RequirementsScraper.Scraper(input_pdf=input_path,
-                                          output_path=output_path)
+    scraper = RequirementsScraper.Scraper(input_pdf=input_path)
 
     x = scraper.dump_text()
     print(x)
