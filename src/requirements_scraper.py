@@ -1,6 +1,6 @@
 import os
 import pdfplumber
-from common import *
+from utilities import *
 import re
 import pandas as pd
 import openpyxl
