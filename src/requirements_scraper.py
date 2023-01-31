@@ -1,102 +1,65 @@
 import os
 import pdfplumber
-from utilities import *
+import src.utilities as utilities
 import re
 import pandas as pd
-import openpyxl
-
-reserved_table_keyword = 'REServed_table'
-
-
-# Helper functions
-def _extract_table_text(page, table):
-    table_text = page.crop(table.bbox).extract_text()
-    return table_text
-
-
-def _remove_table_text(page_text, table_text, table_number):
-    updated_text = page_text.replace(table_text, f".\n{reserved_table_keyword} TABLE {table_number}.png.\n")
-    return updated_text
-
-
-def _table_to_image(page, table, table_number, save_location, table_resolution=100, img_extension='png'):
-    table_filepath = os.path.join(save_location, f"TABLE {table_number}.{img_extension}")
-    page.crop(table.bbox).to_image(resolution=table_resolution).save(table_filepath)
-
-
-def _create_df(doc_col, heading1_col, heading2_col, requirement_col):
-    return pd.DataFrame(columns=[str(doc_col), str(heading1_col), str(heading2_col), str(requirement_col)])
-
-
-def _req_under_heading(
-        previous_heading_tuple, current_heading_tuple, requirement_tuple, last_heading=False
-):
-    """Function checks if the requirement sits after previous_heading and before current_heading."""
-    if last_heading:
-        if requirement_tuple[0] > current_heading_tuple[1]:
-            return True
-    else:
-        if previous_heading_tuple[1] < requirement_tuple[0] < current_heading_tuple[1]:
-            return True
-        else:
-            return False
-
-
-def _find_img_name_in_cell(cell,
-                           img_extension='.png'
-                           ):
-    a = cell.value.find(reserved_table_keyword) + len(reserved_table_keyword)
-    b = cell.value.find(img_extension) + len(img_extension)
-
-    img_name = cell.value[a:b].strip()
-
-    return img_name
-
-
-def _insert_img_to_cell(img_dir,
-                        cell_text,
-                        cell,
-                        ws
-                        ):
-    img = openpyxl.drawing.image.Image(img_dir)
-    img.anchor = str(cell.coordinate)
-    ws.add_image(img)
-
-
-def _post_process_sheet(
-        sheet_dir,
-        extract_tables=True,
-        img_folder=None,
-        table_text='Inserted_Table'
-):
-    wb = openpyxl.load_workbook(sheet_dir)
-    ws = wb.active
-    if extract_tables and img_folder is None:
-        raise ValueError('Require a directory for table_folder if extract_tables is True.')
-
-    # Replace reserved table keyword with an image of the table...
-
-    for row in ws.rows:
-        for cell in row:
-            if cell.value is not None:
-                if reserved_table_keyword in str(cell.value):
-                    if extract_tables:
-                        img_name = _find_img_name_in_cell(cell)
-                        img_dir = os.path.join(img_folder, img_name)
-                        _insert_img_to_cell(img_dir, table_text, cell, ws)
-                cell.value = str(cell.value).replace(reserved_table_keyword, table_text)
-    wb.save("dataframe.xlsx")
-
-
-def _df_to_excel(df, output_file, extract_tables=False):
-    temp_image_folder = os.getcwd()
-
-    delete_file(output_file)
-    df.to_excel(output_file)
-    _post_process_sheet(output_file, extract_tables=extract_tables, img_folder=temp_image_folder)
 
 
 # Methods to be accessed via the RequirementsScraper class
+
+def table_settings(preset='TfNSW'):
+    available_presets = ['TfNSW']
+
+    """ This class stores detection parameters for PDFPlumber. """
+
+    if preset in available_presets:
+        if preset == 'TfNSW':
+            table_settings = {
+                "vertical_strategy": "lines",
+                "horizontal_strategy": "lines",
+                "explicit_vertical_lines": [],
+                "explicit_horizontal_lines": [],
+                "snap_tolerance": 10,
+                "snap_x_tolerance": 10,
+                "snap_y_tolerance": 10,
+                "join_tolerance": 3,
+                "join_x_tolerance": 3,
+                "join_y_tolerance": 3,
+                "edge_min_length": 3,
+                "min_words_vertical": 3,
+                "min_words_horizontal": 1,
+                "keep_blank_chars": False,
+                "text_tolerance": 3,
+                "text_x_tolerance": 3,
+                "text_y_tolerance": 3,
+                "intersection_tolerance": 3,
+                "intersection_x_tolerance": 3,
+                "intersection_y_tolerance": 3,
+            }
+            return table_settings
+
+    # Ignore invalid preset requests
+    else:
+        print(f"Table preset named {preset} not found!")
+        return None
+
+
+def pdf_page_margins(page, preset='TfNSW'):
+    """ This function takes a pdfplumber page object and returns page
+    margins based on value of preset"""
+    available_presets = ['TfNSW']
+
+    width = page.width
+    height = page.height
+
+    if preset in available_presets:
+        if preset == 'TfNSW':
+            page_margins = (0, 57, width, height - 70)
+        return page_margins
+    else:
+        print(f"Page margin preset named {preset} not found!")
+        return None
+
 
 def requirement_patterns(preset='General'):
     available_presets = ["General", "TfNSW"]
@@ -164,7 +127,7 @@ class Scraper:
         heading_col = "Heading"
         requirement_col = "Requirement Text"
 
-        df = _create_df(self.__doc_col, self.__heading1, self.__heading2, self.__requirement)
+        df = utilities.create_df(self.__doc_col, self.__heading1, self.__heading2, self.__requirement)
 
         # Indexes / variables
         table_index = 0
@@ -195,15 +158,15 @@ class Scraper:
             # to image if extract_tables=True, add to all_text
             for table in tables:
                 table_index += 1
-                table_text = _extract_table_text(page, table)
-                page_text = _remove_table_text(page_text, table_text, table_index)
+                table_text = utilities.extract_table_text(page, table)
+                page_text = utilities.remove_table_text(page_text, table_text, table_index)
 
                 if extract_tables:
-                    _table_to_image(page, table, table_index, self.__temp_image_folder)
+                    utilities.table_to_image(page, table, table_index, self.__temp_image_folder)
             all_text += page_text
 
         # Find compile search strings into regex
-        all_text = remove_cid_text(all_text)
+        all_text = utilities.remove_cid_text(all_text)
 
         headings_re = re.compile(headings_str)
         requirements_re = re.compile(requirements_str)
@@ -246,7 +209,7 @@ class Scraper:
         use after generating dataframe using scrape_pdf()
         Overwrites output_file."""
 
-        _df_to_excel(df, output_file, extract_tables=extract_tables)
+        utilities.df_to_excel(df, output_file, extract_tables=extract_tables)
 
     def _append_to_df(self,
                       df,
@@ -300,8 +263,8 @@ class Scraper:
             # to image if extract_tables=True, add to all_text
             for table in tables:
                 table_index += 1
-                table_text = _extract_table_text(page, table)
-                page_text = _remove_table_text(page_text, table_text, table_index)
+                table_text = utilities.extract_table_text(page, table)
+                page_text = utilities.remove_table_text(page_text, table_text, table_index)
             all_text += page_text
-        all_text = remove_cid_text(all_text)
+        all_text = utilities.remove_cid_text(all_text)
         return all_text
